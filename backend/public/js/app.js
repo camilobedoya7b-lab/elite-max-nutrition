@@ -68,6 +68,13 @@ async function iniciarApp() {
   const badge = document.getElementById('navRolBadge');
   badge.textContent = rolLabels[usuario.rol];
   badge.className = `badge ${rolColors[usuario.rol]}`;
+
+  // Ocultar todas las vistas primero
+  document.getElementById('vistaAsesor').classList.add('hidden');
+  document.getElementById('vistaLogistica').classList.add('hidden');
+  document.getElementById('vistaAdmin').classList.add('hidden');
+
+  // Mostrar solo la vista correcta
   if (usuario.rol === 'asesor') {
     document.getElementById('vistaAsesor').classList.remove('hidden');
     await cargarDatosAsesor();

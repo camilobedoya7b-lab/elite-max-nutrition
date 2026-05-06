@@ -288,7 +288,7 @@ async function cargarDatosAdmin() {
       <div class="stat-card" style="border-top-color:#e74c3c"><div class="number" style="color:#e74c3c">${stats.recibido}</div><div class="label">Recibidos</div></div>
       <div class="stat-card" style="border-top-color:#f39c12"><div class="number" style="color:#f39c12">${stats.preparacion}</div><div class="label">En Preparación</div></div>
       <div class="stat-card" style="border-top-color:#2980b9"><div class="number" style="color:#2980b9">${stats.despachado}</div><div class="label">Despachados</div></div>
-      <div class="stat-card" style="border-top-color:#27ae60"><div class="number" style="color:#27ae60">${stats.entregado}</div><div class="label">Entregados</div></div>`;
+      <div class="stat-card" style="border-top-color:#27ae60"><div class="number" style="color:#27ae60D">${stats.entregado}</div><div class="label">Entregados</div></div>`;
     tabAdmin('pedidos', document.querySelector('.tab.active'));
   } catch(err) { console.error(err); }
 }
@@ -339,13 +339,14 @@ async function tabAdmin(tab, el) {
         <button class="btn btn-dorado btn-sm" onclick="formUsuario()">+ Nuevo Usuario</button>
       </div>
       <table class="tabla">
-        <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
         <tbody>${users.map(u => `<tr>
-          <td>${u.nombre}</td>
-          <td>${u.email}</td>
-          <td><span class="badge badge-${u.rol}">${u.rol}</span></td>
-          <td><span class="badge ${u.activo ? 'badge-entregado' : 'badge-recibido'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
-        </tr>`).join('')}</tbody>
+        <td>${u.nombre}</td>
+        <td>${u.email}</td>
+        <td><span class="badge badge-${u.rol}">${u.rol}</span></td>
+        <td><span class="badge ${u.activo ? 'badge-entregado' : 'badge-recibido'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
+        <td><button class="btn btn-dorado btn-sm" onclick="editarUsuario(${u.id},'${u.nombre}','${u.email}','${u.rol}',${u.activo})">Editar</button></td>
+      </tr>`).join('')}</tbody>
       </table>
     </div>`;
 
@@ -421,6 +422,26 @@ function formUsuario() {
     return;
   }
   api('/usuarios', 'POST', { nombre, email, password, rol })
+    .then(() => tabAdmin('usuarios', document.querySelector('.tab.active')))
+    .catch(err => alert(err.message));
+}
+function editarUsuario(id, nombre, email, rol, activo) {
+  const nuevoNombre = prompt('Nombre:', nombre);
+  if (!nuevoNombre) return;
+  const nuevoEmail = prompt('Email:', email);
+  const nuevoRol = prompt('Rol (asesor / logistica / admin):', rol);
+  const nuevaPassword = prompt('Nueva contraseña (dejar vacío para no cambiar):');
+  const nuevoActivo = confirm('¿Usuario activo?');
+
+  if (!['asesor', 'logistica', 'admin'].includes(nuevoRol)) {
+    alert('Rol inválido');
+    return;
+  }
+
+  const body = { nombre: nuevoNombre, email: nuevoEmail, rol: nuevoRol, activo: nuevoActivo };
+  if (nuevaPassword) body.password = nuevaPassword;
+
+  api(`/usuarios/${id}`, 'PUT', body)
     .then(() => tabAdmin('usuarios', document.querySelector('.tab.active')))
     .catch(err => alert(err.message));
 }

@@ -1,4 +1,4 @@
-const API = 'http://localhost:3000/api';
+const API = 'https://elite-max-nutrition-production.up.railway.app/api';
 let token = localStorage.getItem('token');
 let usuario = JSON.parse(localStorage.getItem('usuario') || 'null');
 let productos = [];

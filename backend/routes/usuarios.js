@@ -31,4 +31,25 @@ router.post('/', verificarToken, soloAdmin, async (req, res) => {
   }
 });
 
+// Editar usuario
+router.put('/:id', verificarToken, soloAdmin, async (req, res) => {
+  const bcrypt = require('bcryptjs');
+  const { nombre, email, password, rol, activo } = req.body;
+  try {
+    let query, params;
+    if (password) {
+      const password_hash = await bcrypt.hash(password, 10);
+      query = 'UPDATE usuarios SET nombre=$1, email=$2, password_hash=$3, rol=$4, activo=$5 WHERE id=$6 RETURNING id, nombre, email, rol, activo';
+      params = [nombre, email, password_hash, rol, activo, req.params.id];
+    } else {
+      query = 'UPDATE usuarios SET nombre=$1, email=$2, rol=$3, activo=$4 WHERE id=$5 RETURNING id, nombre, email, rol, activo';
+      params = [nombre, email, rol, activo, req.params.id];
+    }
+    const result = await pool.query(query, params);
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Error actualizando usuario' });
+  }
+});
+
 module.exports = router;

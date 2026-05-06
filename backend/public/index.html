@@ -68,23 +68,23 @@
   </div>
 
   <!-- VISTA LOGISTICA -->
-  <div id="vistaLogistica" class="hidden">
-    <div class="app-container">
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">🚚 Panel de Logística</span>
-          <select id="filtroEstado" class="form-group" style="width:auto;padding:6px 12px" onchange="cargarPedidosLogistica()">
-            <option value="">Todos los estados</option>
-            <option value="Recibido">Recibido</option>
-            <option value="En preparacion">En preparacion</option>
-            <option value="Despachado">Despachado</option>
-            <option value="Entregado">Entregado</option>
-          </select>
-        </div>
-        <div id="listaPedidosLogistica"></div>
+<div id="vistaLogistica" class="hidden">
+  <div class="app-container">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🚚 Panel de Logística</span>
+        <select id="filtroEstado" class="form-group" style="width:auto;padding:6px 12px" onchange="cargarPedidosLogistica()">
+          <option value="">Todos los estados</option>
+          <option value="Recibido">Recibido</option>
+          <option value="En preparacion">En preparacion</option>
+          <option value="Despachado">Despachado</option>
+          <option value="Entregado">Entregado</option>
+        </select>
       </div>
+      <div id="listaPedidosLogistica"></div>
     </div>
   </div>
+</div>
 
   <!-- VISTA ADMIN -->
   <div id="vistaAdmin" class="hidden">
@@ -161,6 +161,60 @@
       <textarea id="estadoObservaciones" rows="2" placeholder="Opcional..."></textarea>
     </div>
     <button class="btn btn-primary" onclick="actualizarEstado()">Guardar cambios</button>
+  </div>
+</div>
+
+<!-- MODAL DETALLE PEDIDO -->
+<div id="modalDetalle" class="modal-overlay hidden">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <span class="modal-title" id="detalleCodigo">📦 Detalle del Pedido</span>
+      <button class="btn-close" onclick="cerrarModalDetalle()">×</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:4px">CLIENTE</div>
+        <div id="detalleCliente" style="font-weight:700;font-size:16px;color:var(--azul)"></div>
+        <div id="detalleCiudad" style="font-size:13px;color:#666;margin-top:2px"></div>
+      </div>
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:4px">ASESOR</div>
+        <div id="detalleAsesor" style="font-weight:600;font-size:14px"></div>
+        <div id="detalleFecha" style="font-size:13px;color:#666;margin-top:2px"></div>
+      </div>
+    </div>
+
+    <div style="font-size:12px;color:#888;margin-bottom:8px;font-weight:600">PRODUCTOS DEL PEDIDO</div>
+    <table class="tabla" style="margin-bottom:16px">
+      <thead>
+        <tr>
+          <th>Producto</th>
+          <th style="text-align:center">Cantidad</th>
+          <th style="text-align:right">Precio Unit.</th>
+          <th style="text-align:right">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody id="detalleProductos"></tbody>
+    </table>
+
+    <div class="total-section">
+      <div class="total-row"><span>Subtotal:</span><span id="detalleSubtotal"></span></div>
+      <div class="total-row"><span>Descuento:</span><span id="detalleDescuento"></span></div>
+      <div class="total-row"><span class="total-final">TOTAL:</span><span class="total-final" id="detalleTotal"></span></div>
+    </div>
+
+    <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:4px">ESTADO ACTUAL</div>
+        <div id="detalleEstado"></div>
+      </div>
+      <div id="detalleObservaciones" style="font-size:13px;color:#666;max-width:300px;text-align:right"></div>
+    </div>
+
+    <div style="margin-top:20px;display:flex;gap:12px;justify-content:flex-end">
+      <button class="btn" style="background:#f0f0f0;color:#444" onclick="cerrarModalDetalle()">Cerrar</button>
+      <button class="btn btn-dorado" id="btnActualizarDesdeDetalle">Actualizar Estado</button>
+    </div>
   </div>
 </div>
 

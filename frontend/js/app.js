@@ -153,9 +153,11 @@ async function cargarPedidosLogistica() {
         <div class="pedido-productos">${(p.productos||[]).filter(x=>x.producto_id).map(x=>`${x.producto_nombre} x${x.cantidad}`).join(' • ')}</div>
         <div class="pedido-footer">
           <span class="pedido-total">${fmt(p.total)}</span>
-          <button class="btn btn-dorado btn-sm" onclick="abrirModalEstado(${p.id}, '${p.estado}', \`${p.observaciones||''}\`)">Actualizar estado</button>
-        </div>
-      </div>`).join('');
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" style="background:#e8f0fe;color:var(--azul)" onclick='abrirModalDetalle(${JSON.stringify(p).replace(/'/g, "&#39;")})'>Ver detalle</button>
+            <button class="btn btn-dorado btn-sm" onclick="abrirModalEstado(${p.id}, '${p.estado}', \`${p.observaciones||''}\`)">Actualizar estado</button>
+          </div>
+        </div>`).join('');
   } catch(err) { console.error(err); }
 }
 
@@ -451,6 +453,40 @@ function editarUsuario(id, nombre, email, rol, activo) {
   api(`/usuarios/${id}`, 'PUT', body)
     .then(() => tabAdmin('usuarios', document.querySelector('.tab.active')))
     .catch(err => alert(err.message));
+}
+
+function abrirModalDetalle(pedido) {
+  document.getElementById('detalleCodigo').textContent = `📦 Pedido ${pedido.codigo}`;
+  document.getElementById('detalleCliente').textContent = pedido.cliente_nombre;
+  document.getElementById('detalleCiudad').textContent = `📍 ${pedido.cliente_ciudad || ''}`;
+  document.getElementById('detalleAsesor').textContent = `👤 ${pedido.asesor_nombre}`;
+  document.getElementById('detalleFecha').textContent = `📅 ${new Date(pedido.fecha).toLocaleDateString('es-CO')}`;
+  document.getElementById('detalleEstado').innerHTML = badgeEstado(pedido.estado);
+  document.getElementById('detalleObservaciones').textContent = pedido.observaciones ? `💬 ${pedido.observaciones}` : '';
+
+  const prods = (pedido.productos || []).filter(x => x.producto_id);
+  document.getElementById('detalleProductos').innerHTML = prods.map(p => `
+    <tr>
+      <td>${p.producto_nombre}</td>
+      <td style="text-align:center">${p.cantidad}</td>
+      <td style="text-align:right">${fmt(p.precio_unitario)}</td>
+      <td style="text-align:right">${fmt(p.subtotal)}</td>
+    </tr>`).join('');
+
+  document.getElementById('detalleSubtotal').textContent = fmt(pedido.subtotal);
+  document.getElementById('detalleDescuento').textContent = `-${fmt(pedido.subtotal * pedido.descuento / 100)} (${pedido.descuento}%)`;
+  document.getElementById('detalleTotal').textContent = fmt(pedido.total);
+
+  document.getElementById('btnActualizarDesdeDetalle').onclick = () => {
+    cerrarModalDetalle();
+    abrirModalEstado(pedido.id, pedido.estado, pedido.observaciones || '');
+  };
+
+  document.getElementById('modalDetalle').classList.remove('hidden');
+}
+
+function cerrarModalDetalle() {
+  document.getElementById('modalDetalle').classList.add('hidden');
 }
 
 // ===== INICIO =====

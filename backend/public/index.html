@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elite Max Nutrition</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- ===== LOGIN ===== -->
+<div id="loginPage">
+  <div class="login-container">
+    <div class="login-box">
+      <div class="login-logo">
+        <img src="images/elitemax.jpg" alt="Elite Max Nutrition" 
+            style="height:90px;object-fit:contain;margin-bottom:8px;border-radius:8px">
+        <h1>Elite Max Nutrition</h1>
+        <p>Sistema de Gestión de Gestión de Pedidos</p>
+      </div>
+      <div id="loginError" class="alert alert-error hidden"></div>
+      <div class="form-group">
+        <label>Correo electrónico</label>
+        <input type="email" id="loginEmail" placeholder="tu@email.com">
+      </div>
+      <div class="form-group">
+        <label>Contraseña</label>
+        <input type="password" id="loginPassword" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary" onclick="login()">Ingresar al sistema</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== APP ===== -->
+<div id="appPage" class="hidden">
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="navbar-brand">
+  <img src="images/elitemax.jpg" alt="Logo" 
+       style="height:40px;object-fit:contain;border-radius:4px">
+  <span>Elite Max <span style="color:var(--dorado)">Nutrition</span></span>
+</div>
+    <div class="navbar-user">
+      <span id="navNombre"></span>
+      <span id="navRolBadge" class="badge"></span>
+      <button class="btn-logout" onclick="logout()">Salir</button>
+    </div>
+  </nav>
+
+  <!-- VISTA ASESOR -->
+  <div id="vistaAsesor" class="hidden">
+    <div class="app-container">
+      <div class="card">
+        <div class="meta-container" id="metaContainer"></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">📦 Mis Pedidos</span>
+          <button class="btn btn-dorado btn-sm" onclick="abrirModalPedido()">+ Nuevo Pedido</button>
+        </div>
+        <div id="listaPedidosAsesor"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VISTA LOGISTICA -->
+  <div id="vistaLogistica" class="hidden">
+    <div class="app-container">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">🚚 Panel de Logística</span>
+          <select id="filtroEstado" class="form-group" style="width:auto;padding:6px 12px" onchange="cargarPedidosLogistica()">
+            <option value="">Todos los estados</option>
+            <option value="Recibido">Recibido</option>
+            <option value="En preparación">En preparación</option>
+            <option value="Despachado">Despachado</option>
+            <option value="Entregado">Entregado</option>
+          </select>
+        </div>
+        <div id="listaPedidosLogistica"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VISTA ADMIN -->
+  <div id="vistaAdmin" class="hidden">
+    <div class="app-container">
+      <div class="stats-grid" id="statsGrid"></div>
+      <div class="tabs">
+        <button class="tab active" onclick="tabAdmin('pedidos', this)">📦 Pedidos</button>
+        <button class="tab" onclick="tabAdmin('productos', this)">🥤 Productos</button>
+        <button class="tab" onclick="tabAdmin('clientes', this)">👥 Clientes</button>
+        <button class="tab" onclick="tabAdmin('usuarios', this)">👤 Usuarios</button>
+        <button class="tab" onclick="tabAdmin('metas', this)">🎯 Metas</button>
+      </div>
+      <div id="adminContenido"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- MODAL NUEVO PEDIDO -->
+<div id="modalPedido" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">📦 Nuevo Pedido</span>
+      <button class="btn-close" onclick="cerrarModalPedido()">×</button>
+    </div>
+    <div id="modalError" class="alert alert-error hidden"></div>
+    <div class="form-group">
+      <label>Cliente</label>
+      <select id="pedidoCliente" onchange="cargarDescuentoCliente()">
+        <option value="">Seleccionar cliente...</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Descuento (%)</label>
+      <input type="number" id="pedidoDescuento" value="0" min="0" max="100" oninput="calcularTotal()">
+    </div>
+    <div class="form-group">
+      <label>Productos</label>
+      <div id="productosRows"></div>
+      <button class="btn btn-sm" style="margin-top:8px;background:#e8f5e9;color:#1a472a" onclick="agregarProductoRow()">+ Agregar producto</button>
+    </div>
+    <div class="total-section">
+      <div class="total-row"><span>Subtotal:</span><span id="totalSubtotal">$0</span></div>
+      <div class="total-row"><span>Descuento:</span><span id="totalDescuento">-$0</span></div>
+      <div class="total-row"><span class="total-final">TOTAL:</span><span class="total-final" id="totalFinal">$0</span></div>
+    </div>
+    <div class="form-group" style="margin-top:16px">
+      <label>Observaciones</label>
+      <textarea id="pedidoObservaciones" rows="2" placeholder="Opcional..."></textarea>
+    </div>
+    <button class="btn btn-primary" style="margin-top:8px" onclick="crearPedido()">Crear Pedido</button>
+  </div>
+</div>
+
+<!-- MODAL CAMBIAR ESTADO -->
+<div id="modalEstado" class="modal-overlay hidden">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <span class="modal-title">🔄 Actualizar Estado</span>
+      <button class="btn-close" onclick="cerrarModalEstado()">×</button>
+    </div>
+    <input type="hidden" id="estadoPedidoId">
+    <div class="form-group">
+      <label>Nuevo Estado</label>
+      <select id="nuevoEstado">
+        <option value="Recibido">🔴 Recibido</option>
+        <option value="En preparacion">🟡 En preparacion</option>
+        <option value="Despachado">🔵 Despachado</option>
+        <option value="Entregado">🟢 Entregado</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Observaciones</label>
+      <textarea id="estadoObservaciones" rows="2" placeholder="Opcional..."></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="actualizarEstado()">Guardar cambios</button>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

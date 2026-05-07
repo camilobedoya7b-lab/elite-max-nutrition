@@ -127,9 +127,11 @@ async function cargarPedidosAsesor() {
         <div class="pedido-productos">${(p.productos||[]).filter(x=>x.producto_id).map(x=>`${x.producto_nombre} x${x.cantidad}`).join(' • ')}</div>
         <div class="pedido-footer">
           <span class="pedido-total">${fmt(p.total)}</span>
-          <span style="font-size:12px;color:#888">${p.observaciones || ''}</span>
-        </div>
-      </div>`).join('');
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" style="background:#e8f0fe;color:var(--azul)" onclick='abrirModalEditarPedido(${JSON.stringify(p).replace(/'/g, "&#39;")})'>✏️ Editar</button>
+            <button class="btn btn-sm btn-danger" onclick="eliminarPedido(${p.id},'${p.codigo}')">🗑️ Eliminar</button>
+          </div>
+        </div>`).join('');
   } catch(err) { console.error(err); }
 }
 
@@ -319,6 +321,12 @@ async function tabAdmin(tab, el) {
         <td>${fmt(p.total)}</td>
         <td>${badgeEstado(p.estado)}</td>
         <td><button class="btn btn-dorado btn-sm" onclick="abrirModalEstado(${p.id},'${p.estado}','${p.observaciones||''}')">Actualizar</button></td>
+        <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-dorado btn-sm" onclick="abrirModalEstado(${p.id},'${p.estado}','${p.observaciones||''}')">Estado</button>
+          <button class="btn btn-sm btn-danger" onclick="eliminarPedido(${p.id},'${p.codigo}')">🗑️</button>
+        </div>
+        </td>
       </tr>`).join('')}</tbody>
     </table></div>`;
 
@@ -487,6 +495,96 @@ function abrirModalDetalle(pedido) {
 
 function cerrarModalDetalle() {
   document.getElementById('modalDetalle').classList.add('hidden');
+}
+
+async function eliminarPedido(id, codigo) {
+  if (!confirm(`¿Estás seguro de eliminar el pedido ${codigo}? Esta acción no se puede deshacer.`)) return;
+  try {
+    await api(`/pedidos/${id}`, 'DELETE');
+    if (usuario.rol === 'asesor') cargarPedidosAsesor();
+    else cargarDatosAdmin();
+  } catch(err) { alert(err.message); }
+}
+
+async function abrirModalEditarPedido(pedido) {
+  await Promise.all([cargarProductos(), cargarClientes()]);
+  
+  // Reusar el modal de nuevo pedido
+  document.getElementById('productosRows').innerHTML = '';
+  document.getElementById('pedidoDescuento').value = pedido.descuento || 0;
+  document.getElementById('pedidoObservaciones').value = pedido.observaciones || '';
+  document.getElementById('modalError').classList.add('hidden');
+
+  // Cambiar título del modal
+  document.querySelector('#modalPedido .modal-title').textContent = `✏️ Editar Pedido ${pedido.codigo}`;
+
+  // Seleccionar cliente
+  const sel = document.getElementById('pedidoCliente');
+  sel.innerHTML = '<option value="">Seleccionar cliente...</option>' +
+    clientes.map(c => `<option value="${c.id}" data-descuento="${c.descuento}">${c.nombre} — ${c.ciudad}</option>`).join('');
+  sel.value = pedido.cliente_id;
+
+  // Cargar productos existentes
+  const prods = (pedido.productos || []).filter(x => x.producto_id);
+  for (const p of prods) {
+    const div = document.createElement('div');
+    div.className = 'producto-row';
+    div.innerHTML = `
+      <select class="prod-select" onchange="actualizarPrecio(this)">
+        <option value="">Seleccionar producto...</option>
+        ${productos.map(pr => `<option value="${pr.id}" data-precio="${pr.precio}" ${pr.id == p.producto_id ? 'selected' : ''}>${pr.nombre}</option>`).join('')}
+      </select>
+      <input type="number" class="prod-cantidad" placeholder="Cant." min="1" value="${p.cantidad}" oninput="calcularTotal()">
+      <input type="number" class="prod-precio" placeholder="Precio" value="${p.precio_unitario}" readonly>
+      <button onclick="this.parentElement.remove();calcularTotal()" style="background:#fdecea;border:none;border-radius:6px;cursor:pointer;color:#e74c3c;font-size:18px">×</button>`;
+    document.getElementById('productosRows').appendChild(div);
+  }
+
+  calcularTotal();
+
+  // Cambiar el botón de crear por actualizar
+  const btn = document.querySelector('#modalPedido .btn-primary');
+  btn.textContent = 'Guardar cambios';
+  btn.onclick = () => actualizarPedido(pedido.id);
+
+  document.getElementById('modalPedido').classList.remove('hidden');
+}
+
+async function actualizarPedido(id) {
+  const cliente_id = document.getElementById('pedidoCliente').value;
+  const descuento = parseFloat(document.getElementById('pedidoDescuento').value || 0);
+  const observaciones = document.getElementById('pedidoObservaciones').value;
+  const errorEl = document.getElementById('modalError');
+  errorEl.classList.add('hidden');
+
+  if (!cliente_id) { errorEl.textContent = 'Selecciona un cliente'; errorEl.classList.remove('hidden'); return; }
+
+  const rows = document.querySelectorAll('.producto-row');
+  const productosSeleccionados = [];
+  for (const row of rows) {
+    const producto_id = row.querySelector('.prod-select').value;
+    const cantidad = parseInt(row.querySelector('.prod-cantidad').value);
+    const precio_unitario = parseFloat(row.querySelector('.prod-precio').value);
+    if (producto_id && cantidad > 0 && precio_unitario > 0)
+      productosSeleccionados.push({ producto_id: parseInt(producto_id), cantidad, precio_unitario });
+  }
+
+  if (!productosSeleccionados.length) { errorEl.textContent = 'Agrega al menos un producto'; errorEl.classList.remove('hidden'); return; }
+
+  try {
+    await api(`/pedidos/${id}`, 'PUT', { cliente_id: parseInt(cliente_id), productos: productosSeleccionados, descuento, observaciones });
+    cerrarModalPedido();
+    // Restaurar botón original
+    const btn = document.querySelector('#modalPedido .btn-primary');
+    btn.textContent = 'Crear Pedido';
+    btn.onclick = crearPedido;
+    document.querySelector('#modalPedido .modal-title').textContent = '📦 Nuevo Pedido';
+    if (usuario.rol === 'asesor') { cargarPedidosAsesor(); cargarMetaAsesor(); }
+    else cargarDatosAdmin();
+  } catch(err) {
+    errorEl.textContent = err.message;
+    errorEl.classList.remove('hidden');
+  }
 }
 
 // ===== INICIO =====

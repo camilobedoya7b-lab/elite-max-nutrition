@@ -104,5 +104,74 @@ router.put('/:id/estado', verificarToken, soloLogistica, async (req, res) => {
     res.status(500).json({ error: 'Error actualizando estado' });
   }
 });
+// Editar pedido completo (asesor dueño o admin)
+router.put('/:id', verificarToken, async (req, res) => {
+  const { cliente_id, productos, descuento, observaciones } = req.body;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Verificar permisos
+    const pedidoActual = await client.query('SELECT * FROM pedidos WHERE id=$1', [req.params.id]);
+    if (!pedidoActual.rows.length) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (req.usuario.rol === 'asesor' && pedidoActual.rows[0].asesor_id !== req.usuario.id)
+      return res.status(403).json({ error: 'No puedes editar pedidos de otros asesores' });
+
+    // Recalcular totales
+    let subtotal = 0;
+    for (const item of productos) subtotal += item.cantidad * item.precio_unitario;
+    const total = subtotal - (subtotal * (descuento || 0) / 100);
+
+    // Actualizar pedido
+    await client.query(
+      `UPDATE pedidos SET cliente_id=$1, descuento=$2, subtotal=$3, total=$4, observaciones=$5, fecha_actualizacion=NOW() WHERE id=$6`,
+      [cliente_id, descuento || 0, subtotal, total, observaciones, req.params.id]
+    );
+
+    // Eliminar detalle anterior y reinsertar
+    await client.query('DELETE FROM detalle_pedidos WHERE pedido_id=$1', [req.params.id]);
+    for (const item of productos) {
+      await client.query(
+        `INSERT INTO detalle_pedidos (pedido_id, producto_id, cantidad, precio_unitario, subtotal) VALUES ($1,$2,$3,$4,$5)`,
+        [req.params.id, item.producto_id, item.cantidad, item.precio_unitario, item.cantidad * item.precio_unitario]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ message: 'Pedido actualizado correctamente' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Error actualizando pedido' });
+  } finally {
+    client.release();
+  }
+});
+
+// Eliminar pedido (asesor dueño o admin)
+router.delete('/:id', verificarToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Verificar permisos
+    const pedidoActual = await client.query('SELECT * FROM pedidos WHERE id=$1', [req.params.id]);
+    if (!pedidoActual.rows.length) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (req.usuario.rol === 'asesor' && pedidoActual.rows[0].asesor_id !== req.usuario.id)
+      return res.status(403).json({ error: 'No puedes eliminar pedidos de otros asesores' });
+
+    // Eliminar detalle primero (FK)
+    await client.query('DELETE FROM detalle_pedidos WHERE pedido_id=$1', [req.params.id]);
+    await client.query('DELETE FROM pedidos WHERE id=$1', [req.params.id]);
+
+    await client.query('COMMIT');
+    res.json({ message: 'Pedido eliminado correctamente' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: 'Error eliminando pedido' });
+  } finally {
+    client.release();
+  }
+});
 
 module.exports = router;

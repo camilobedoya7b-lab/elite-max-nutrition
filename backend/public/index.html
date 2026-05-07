@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Elite Max Nutrition</title>
-<link rel="icon" type="image/jpeg" href="images/elitemax.jpg">
+  <link rel="icon" type="image/jpeg" href="img/elitemax.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -15,10 +16,10 @@
   <div class="login-container">
     <div class="login-box">
       <div class="login-logo">
-        <img src="images/elitemax.jpg" alt="Elite Max Nutrition" 
-            style="height:90px;object-fit:contain;margin-bottom:8px;border-radius:8px">
+        <img src="img/elitemax.jpg" alt="Elite Max Nutrition"
+             style="height:90px;object-fit:contain;margin-bottom:8px;border-radius:8px">
         <h1>Elite Max Nutrition</h1>
-        <p>Sistema Gestión de Pedidos</p>
+        <p>Sistema de Gestión de Pedidos</p>
       </div>
       <div id="loginError" class="alert alert-error hidden"></div>
       <div class="form-group">
@@ -40,10 +41,9 @@
   <!-- NAVBAR -->
   <nav class="navbar">
     <div class="navbar-brand">
-  <img src="images/elitemax.jpg" alt="Logo" 
-       style="height:40px;object-fit:contain;border-radius:4px">
-  <span>Elite Max <span style="color:var(--dorado)">Nutrition</span></span>
-</div>
+      <img src="img/elitemax.jpg" alt="Logo" style="height:40px;object-fit:contain;border-radius:4px">
+      <span>Elite Max <span style="color:var(--dorado)">Nutrition</span></span>
+    </div>
     <div class="navbar-user">
       <span id="navNombre"></span>
       <span id="navRolBadge" class="badge"></span>
@@ -64,27 +64,61 @@
         </div>
         <div id="listaPedidosAsesor"></div>
       </div>
+      <!-- INFORMES ASESOR -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">📊 Mis Informes</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:12px;align-items:end;margin-bottom:16px">
+          <div class="form-group" style="margin:0"><label>Desde</label><input type="date" id="informeDesdeAsesor"></div>
+          <div class="form-group" style="margin:0"><label>Hasta</label><input type="date" id="informeHastaAsesor"></div>
+          <button class="btn btn-dorado" onclick="generarInformeAsesor()">📊 Ver</button>
+          <button class="btn" style="background:var(--azul);color:#fff" onclick="exportarExcelAsesor()">📥 Excel</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <button class="btn btn-sm" id="tabAsesorProd" onclick="cambiarTabInformeAsesor('producto')" style="background:var(--azul);color:#fff">Por Producto</button>
+          <button class="btn btn-sm" id="tabAsesorCliente" onclick="cambiarTabInformeAsesor('cliente')" style="background:#f0f0f0;color:#444">Por Cliente</button>
+        </div>
+        <div id="informeResultadoAsesor"></div>
+      </div>
     </div>
   </div>
 
   <!-- VISTA LOGISTICA -->
-<div id="vistaLogistica" class="hidden">
-  <div class="app-container">
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">🚚 Panel de Logística</span>
-        <select id="filtroEstado" class="form-group" style="width:auto;padding:6px 12px" onchange="cargarPedidosLogistica()">
-          <option value="">Todos los estados</option>
-          <option value="Recibido">Recibido</option>
-          <option value="En preparacion">En preparacion</option>
-          <option value="Despachado">Despachado</option>
-          <option value="Entregado">Entregado</option>
-        </select>
+  <div id="vistaLogistica" class="hidden">
+    <div class="app-container">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">🚚 Panel de Logística</span>
+          <select id="filtroEstado" style="padding:6px 12px;border:2px solid #e0e0e0;border-radius:8px" onchange="cargarPedidosLogistica()">
+            <option value="">Todos los estados</option>
+            <option value="Recibido">Recibido</option>
+            <option value="En preparacion">En preparación</option>
+            <option value="Despachado">Despachado</option>
+            <option value="Entregado">Entregado</option>
+          </select>
+        </div>
+        <div id="listaPedidosLogistica"></div>
       </div>
-      <div id="listaPedidosLogistica"></div>
     </div>
   </div>
-</div>
+
+  <!-- VISTA FACTURACION -->
+  <div id="vistaFacturacion" class="hidden">
+    <div class="app-container">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">📋 Panel de Facturación</span>
+          <select id="filtroEstadoFact" style="padding:6px 12px;border:2px solid #e0e0e0;border-radius:8px" onchange="cargarPedidosFacturacion()">
+            <option value="">Todos los estados</option>
+            <option value="Recibido">Recibido</option>
+            <option value="En preparacion">En preparación</option>
+            <option value="Despachado">Despachado</option>
+            <option value="Entregado">Entregado</option>
+          </select>
+        </div>
+        <div id="listaPedidosFacturacion"></div>
+      </div>
+    </div>
+  </div>
 
   <!-- VISTA ADMIN -->
   <div id="vistaAdmin" class="hidden">
@@ -96,6 +130,7 @@
         <button class="tab" onclick="tabAdmin('clientes', this)">👥 Clientes</button>
         <button class="tab" onclick="tabAdmin('usuarios', this)">👤 Usuarios</button>
         <button class="tab" onclick="tabAdmin('metas', this)">🎯 Metas</button>
+        <button class="tab" onclick="tabAdmin('informes', this)">📊 Informes</button>
       </div>
       <div id="adminContenido"></div>
     </div>
@@ -103,7 +138,7 @@
 
 </div>
 
-<!-- MODAL NUEVO PEDIDO -->
+<!-- MODAL NUEVO/EDITAR PEDIDO -->
 <div id="modalPedido" class="modal-overlay hidden">
   <div class="modal">
     <div class="modal-header">
@@ -117,9 +152,19 @@
         <option value="">Seleccionar cliente...</option>
       </select>
     </div>
-    <div class="form-group">
-      <label>Descuento (%)</label>
-      <input type="number" id="pedidoDescuento" value="0" min="0" max="100" oninput="calcularTotal()">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label>Método de pago</label>
+        <select id="pedidoMetodoPago" onchange="calcularTotal()">
+          <option value="Efectivo">💵 Efectivo</option>
+          <option value="Transferencia">🏦 Transferencia</option>
+          <option value="Credito">💳 Crédito</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Descuento (%)</label>
+        <input type="number" id="pedidoDescuento" value="0" min="0" max="100" oninput="calcularTotal()">
+      </div>
     </div>
     <div class="form-group">
       <label>Productos</label>
@@ -130,6 +175,7 @@
       <div class="total-row"><span>Subtotal:</span><span id="totalSubtotal">$0</span></div>
       <div class="total-row"><span>Descuento:</span><span id="totalDescuento">-$0</span></div>
       <div class="total-row"><span class="total-final">TOTAL:</span><span class="total-final" id="totalFinal">$0</span></div>
+      <div style="margin-top:8px;font-weight:600;font-size:13px" id="destinoEstimado"></div>
     </div>
     <div class="form-group" style="margin-top:16px">
       <label>Observaciones</label>
@@ -151,7 +197,7 @@
       <label>Nuevo Estado</label>
       <select id="nuevoEstado">
         <option value="Recibido">🔴 Recibido</option>
-        <option value="En preparacion">🟡 En preparacion</option>
+        <option value="En preparacion">🟡 En preparación</option>
         <option value="Despachado">🔵 Despachado</option>
         <option value="Entregado">🟢 Entregado</option>
       </select>
@@ -183,26 +229,18 @@
         <div id="detalleFecha" style="font-size:13px;color:#666;margin-top:2px"></div>
       </div>
     </div>
-
     <div style="font-size:12px;color:#888;margin-bottom:8px;font-weight:600">PRODUCTOS DEL PEDIDO</div>
     <table class="tabla" style="margin-bottom:16px">
       <thead>
-        <tr>
-          <th>Producto</th>
-          <th style="text-align:center">Cantidad</th>
-          <th style="text-align:right">Precio Unit.</th>
-          <th style="text-align:right">Subtotal</th>
-        </tr>
+        <tr><th>Código</th><th>Producto</th><th style="text-align:center">Cant.</th><th style="text-align:right">Precio Unit.</th><th style="text-align:right">Subtotal</th></tr>
       </thead>
       <tbody id="detalleProductos"></tbody>
     </table>
-
     <div class="total-section">
       <div class="total-row"><span>Subtotal:</span><span id="detalleSubtotal"></span></div>
       <div class="total-row"><span>Descuento:</span><span id="detalleDescuento"></span></div>
       <div class="total-row"><span class="total-final">TOTAL:</span><span class="total-final" id="detalleTotal"></span></div>
     </div>
-
     <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center">
       <div>
         <div style="font-size:12px;color:#888;margin-bottom:4px">ESTADO ACTUAL</div>
@@ -210,7 +248,6 @@
       </div>
       <div id="detalleObservaciones" style="font-size:13px;color:#666;max-width:300px;text-align:right"></div>
     </div>
-
     <div style="margin-top:20px;display:flex;gap:12px;justify-content:flex-end">
       <button class="btn" style="background:#f0f0f0;color:#444" onclick="cerrarModalDetalle()">Cerrar</button>
       <button class="btn btn-dorado" id="btnActualizarDesdeDetalle">Actualizar Estado</button>

@@ -25,6 +25,7 @@ app.use('/api/productos', productosRoutes);
 app.use('/api/clientes', clientesRoutes);
 app.use('/api/metas', metasRoutes);
 app.use('/api/usuarios', usuariosRoutes);
+app.use('/api/informes', require('./routes/informes'));
 
 // Ruta de prueba
 app.get('/api/health', (req, res) => {

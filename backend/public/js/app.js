@@ -13,6 +13,14 @@ const badgeEstado = e => {
   };
   return `<span class="badge ${map[e] || ''}">${e}</span>`;
 };
+const badgeDestino = d => {
+  if (d === 'Facturacion') return `<span class="badge" style="background:#fef3e2;color:#e67e22;border:1px solid #e67e22">📋 Facturación</span>`;
+  return `<span class="badge badge-despachado">🚚 Logística</span>`;
+};
+const badgePago = m => {
+  const map = { 'Efectivo': '💵 Efectivo', 'Transferencia': '🏦 Transferencia', 'Credito': '💳 Crédito' };
+  return map[m] || m;
+};
 
 async function api(path, method = 'GET', body = null) {
   const opts = {
@@ -63,18 +71,17 @@ async function iniciarApp() {
   document.getElementById('loginPage').classList.add('hidden');
   document.getElementById('appPage').classList.remove('hidden');
   document.getElementById('navNombre').textContent = `Hola, ${usuario.nombre} 👋`;
-  const rolLabels = { asesor: 'Asesor', logistica: 'Logística', admin: 'Admin' };
-  const rolColors = { asesor: 'badge-asesor', logistica: 'badge-logistica', admin: 'badge-admin' };
+  const rolLabels = { asesor: 'Asesor', logistica: 'Logística', admin: 'Admin', facturacion: 'Facturación' };
+  const rolColors = { asesor: 'badge-asesor', logistica: 'badge-logistica', admin: 'badge-admin', facturacion: 'badge-preparacion' };
   const badge = document.getElementById('navRolBadge');
   badge.textContent = rolLabels[usuario.rol];
   badge.className = `badge ${rolColors[usuario.rol]}`;
 
-  // Ocultar todas las vistas primero
   document.getElementById('vistaAsesor').classList.add('hidden');
   document.getElementById('vistaLogistica').classList.add('hidden');
   document.getElementById('vistaAdmin').classList.add('hidden');
+  document.getElementById('vistaFacturacion').classList.add('hidden');
 
-  // Mostrar solo la vista correcta
   if (usuario.rol === 'asesor') {
     document.getElementById('vistaAsesor').classList.remove('hidden');
     await cargarDatosAsesor();
@@ -84,6 +91,9 @@ async function iniciarApp() {
   } else if (usuario.rol === 'admin') {
     document.getElementById('vistaAdmin').classList.remove('hidden');
     await cargarDatosAdmin();
+  } else if (usuario.rol === 'facturacion') {
+    document.getElementById('vistaFacturacion').classList.remove('hidden');
+    await cargarPedidosFacturacion();
   }
 }
 
@@ -115,23 +125,33 @@ async function cargarPedidosAsesor() {
     const pedidos = await api('/pedidos');
     const el = document.getElementById('listaPedidosAsesor');
     if (!pedidos.length) { el.innerHTML = '<p style="color:#888;text-align:center;padding:24px">No tienes pedidos aún. ¡Crea tu primer pedido!</p>'; return; }
-    el.innerHTML = pedidos.map(p => `
+    el.innerHTML = pedidos.map(p => {
+      const puedeEditar = p.estado === 'Recibido';
+      return `
       <div class="pedido-card">
         <div class="pedido-header">
           <div>
-            <div class="pedido-codigo">${p.codigo} • ${new Date(p.fecha).toLocaleDateString('es-CO')}</div>
+            <div class="pedido-codigo">${p.codigo} • ${new Date(p.fecha).toLocaleDateString('es-CO')} • ID Asesor: ${p.asesor_codigo}</div>
             <div class="pedido-cliente">${p.cliente_nombre}</div>
+            <div style="font-size:12px;color:#888">${p.cliente_ciudad || ''} • ${p.cliente_telefono || ''}</div>
           </div>
-          ${badgeEstado(p.estado)}
+          <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+            ${badgeEstado(p.estado)}
+            ${badgeDestino(p.destino)}
+          </div>
         </div>
-        <div class="pedido-productos">${(p.productos||[]).filter(x=>x.producto_id).map(x=>`${x.producto_nombre} x${x.cantidad}`).join(' • ')}</div>
+        <div class="pedido-productos">${(p.productos||[]).filter(x=>x.producto_id).map(x=>`${x.producto_codigo ? '['+x.producto_codigo+'] ' : ''}${x.producto_nombre} x${x.cantidad}`).join(' • ')}</div>
         <div class="pedido-footer">
-          <span class="pedido-total">${fmt(p.total)}</span>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-sm" style="background:#e8f0fe;color:var(--azul)" onclick='abrirModalEditarPedido(${JSON.stringify(p).replace(/'/g, "&#39;")})'>✏️ Editar</button>
-            <button class="btn btn-sm btn-danger" onclick="eliminarPedido(${p.id},'${p.codigo}')">🗑️ Eliminar</button>
+          <div>
+            <span class="pedido-total">${fmt(p.total)}</span>
+            <span style="font-size:12px;color:#888;margin-left:8px">${badgePago(p.metodo_pago)}</span>
           </div>
-        </div>`).join('');
+          <div style="display:flex;gap:8px">
+            ${puedeEditar ? `<button class="btn btn-sm" style="background:#e8f0fe;color:var(--azul)" onclick='abrirModalEditarPedido(${JSON.stringify(p).replace(/'/g, "&#39;")})'>✏️ Editar</button>` : ''}
+            ${puedeEditar ? `<button class="btn btn-sm btn-danger" onclick="eliminarPedido(${p.id},'${p.codigo}')">🗑️</button>` : ''}
+          </div>
+        </div>
+      </div>`}).join('');
   } catch(err) { console.error(err); }
 }
 
@@ -142,24 +162,62 @@ async function cargarPedidosLogistica() {
     let pedidos = await api('/pedidos');
     if (filtro) pedidos = pedidos.filter(p => p.estado === filtro);
     const el = document.getElementById('listaPedidosLogistica');
-    if (!pedidos.length) { el.innerHTML = '<p style="color:#888;text-align:center;padding:24px">No hay pedidos.</p>'; return; }
+    if (!pedidos.length) { el.innerHTML = '<p style="color:#888;text-align:center;padding:24px">No hay pedidos asignados a logística.</p>'; return; }
     el.innerHTML = pedidos.map(p => `
       <div class="pedido-card">
         <div class="pedido-header">
           <div>
             <div class="pedido-codigo">${p.codigo} • ${new Date(p.fecha).toLocaleDateString('es-CO')} • Asesor: ${p.asesor_nombre}</div>
             <div class="pedido-cliente">${p.cliente_nombre} — ${p.cliente_ciudad || ''}</div>
+            <div style="font-size:12px;color:#888">${p.cliente_telefono || ''} • ${p.cliente_direccion || ''}</div>
           </div>
           ${badgeEstado(p.estado)}
         </div>
-        <div class="pedido-productos">${(p.productos||[]).filter(x=>x.producto_id).map(x=>`${x.producto_nombre} x${x.cantidad}`).join(' • ')}</div>
+        <div class="pedido-productos">${(p.productos||[]).filter(x=>x.producto_id).map(x=>`${x.producto_codigo ? '['+x.producto_codigo+'] ' : ''}${x.producto_nombre} x${x.cantidad}`).join(' • ')}</div>
+        <div class="pedido-footer">
+          <div>
+            <span class="pedido-total">${fmt(p.total)}</span>
+            <span style="font-size:12px;color:#888;margin-left:8px">${badgePago(p.metodo_pago)}</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" style="background:#e8f0fe;color:var(--azul)" onclick='abrirModalDetalle(${JSON.stringify(p).replace(/'/g, "&#39;")})'>Ver detalle</button>
+            <button class="btn btn-dorado btn-sm" onclick="abrirModalEstado(${p.id}, '${p.estado}', \`${p.observaciones||''}\`)">Actualizar estado</button>
+          </div>
+        </div>
+      </div>`).join('');
+  } catch(err) { console.error(err); }
+}
+
+// ===== VISTA FACTURACION =====
+async function cargarPedidosFacturacion() {
+  try {
+    const filtro = document.getElementById('filtroEstadoFact')?.value || '';
+    let pedidos = await api('/pedidos');
+    if (filtro) pedidos = pedidos.filter(p => p.estado === filtro);
+    const el = document.getElementById('listaPedidosFacturacion');
+    if (!pedidos.length) { el.innerHTML = '<p style="color:#888;text-align:center;padding:24px">No hay pedidos asignados a facturación.</p>'; return; }
+    el.innerHTML = pedidos.map(p => `
+      <div class="pedido-card" style="border-left-color:#e67e22">
+        <div class="pedido-header">
+          <div>
+            <div class="pedido-codigo">${p.codigo} • ${new Date(p.fecha).toLocaleDateString('es-CO')} • Asesor: ${p.asesor_nombre} (ID: ${p.asesor_codigo})</div>
+            <div class="pedido-cliente">${p.cliente_nombre} — ${p.cliente_ciudad || ''}</div>
+            <div style="font-size:12px;color:#888">${p.cliente_telefono || ''} • ${p.cliente_direccion || ''}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+            ${badgeEstado(p.estado)}
+            <span class="badge" style="background:#fef3e2;color:#e67e22">💳 ${p.metodo_pago}</span>
+          </div>
+        </div>
+        <div class="pedido-productos">${(p.productos||[]).filter(x=>x.producto_id).map(x=>`${x.producto_codigo ? '['+x.producto_codigo+'] ' : ''}${x.producto_nombre} x${x.cantidad}`).join(' • ')}</div>
         <div class="pedido-footer">
           <span class="pedido-total">${fmt(p.total)}</span>
           <div style="display:flex;gap:8px">
             <button class="btn btn-sm" style="background:#e8f0fe;color:var(--azul)" onclick='abrirModalDetalle(${JSON.stringify(p).replace(/'/g, "&#39;")})'>Ver detalle</button>
             <button class="btn btn-dorado btn-sm" onclick="abrirModalEstado(${p.id}, '${p.estado}', \`${p.observaciones||''}\`)">Actualizar estado</button>
           </div>
-        </div>`).join('');
+        </div>
+      </div>`).join('');
   } catch(err) { console.error(err); }
 }
 
@@ -179,14 +237,14 @@ async function actualizarEstado() {
   try {
     await api(`/pedidos/${id}/estado`, 'PUT', { estado, observaciones });
     cerrarModalEstado();
-    cargarPedidosLogistica();
+    if (usuario.rol === 'logistica') cargarPedidosLogistica();
+    else if (usuario.rol === 'facturacion') cargarPedidosFacturacion();
+    else cargarDatosAdmin();
   } catch(err) { alert(err.message); }
 }
 
 // ===== PRODUCTOS Y CLIENTES =====
-async function cargarProductos() {
-  productos = await api('/productos');
-}
+async function cargarProductos() { productos = await api('/productos'); }
 async function cargarClientes() {
   clientes = await api('/clientes');
   const sel = document.getElementById('pedidoCliente');
@@ -210,7 +268,12 @@ async function abrirModalPedido() {
   document.getElementById('productosRows').innerHTML = '';
   document.getElementById('pedidoDescuento').value = 0;
   document.getElementById('pedidoObservaciones').value = '';
+  document.getElementById('pedidoMetodoPago').value = 'Efectivo';
   document.getElementById('modalError').classList.add('hidden');
+  document.querySelector('#modalPedido .modal-title').textContent = '📦 Nuevo Pedido';
+  const btn = document.querySelector('#modalPedido .btn-primary');
+  btn.textContent = 'Crear Pedido';
+  btn.onclick = crearPedido;
   agregarProductoRow();
   calcularTotal();
   document.getElementById('modalPedido').classList.remove('hidden');
@@ -223,7 +286,7 @@ function agregarProductoRow() {
   div.innerHTML = `
     <select class="prod-select" onchange="actualizarPrecio(this)">
       <option value="">Seleccionar producto...</option>
-      ${productos.map(p => `<option value="${p.id}" data-precio="${p.precio}">${p.nombre}</option>`).join('')}
+      ${productos.map(p => `<option value="${p.id}" data-precio="${p.precio}">${p.codigo ? '['+p.codigo+'] ' : ''}${p.nombre}</option>`).join('')}
     </select>
     <input type="number" class="prod-cantidad" placeholder="Cant." min="1" value="1" oninput="calcularTotal()">
     <input type="number" class="prod-precio" placeholder="Precio" readonly>
@@ -252,12 +315,20 @@ function calcularTotal() {
   document.getElementById('totalSubtotal').textContent = fmt(subtotal);
   document.getElementById('totalDescuento').textContent = `-${fmt(descuentoVal)}`;
   document.getElementById('totalFinal').textContent = fmt(total);
+
+  // Mostrar destino estimado
+  const metodo = document.getElementById('pedidoMetodoPago')?.value || 'Efectivo';
+  const destino = (metodo === 'Credito' || total >= 1500000) ? '📋 Irá a Facturación' : '🚚 Irá a Logística';
+  const colorDestino = (metodo === 'Credito' || total >= 1500000) ? '#e67e22' : '#2980b9';
+  const elDestino = document.getElementById('destinoEstimado');
+  if (elDestino) { elDestino.textContent = destino; elDestino.style.color = colorDestino; }
 }
 
 async function crearPedido() {
   const cliente_id = document.getElementById('pedidoCliente').value;
   const descuento = parseFloat(document.getElementById('pedidoDescuento').value || 0);
   const observaciones = document.getElementById('pedidoObservaciones').value;
+  const metodo_pago = document.getElementById('pedidoMetodoPago').value;
   const errorEl = document.getElementById('modalError');
   errorEl.classList.add('hidden');
   if (!cliente_id) { errorEl.textContent = 'Selecciona un cliente'; errorEl.classList.remove('hidden'); return; }
@@ -267,13 +338,12 @@ async function crearPedido() {
     const producto_id = row.querySelector('.prod-select').value;
     const cantidad = parseInt(row.querySelector('.prod-cantidad').value);
     const precio_unitario = parseFloat(row.querySelector('.prod-precio').value);
-    if (producto_id && cantidad > 0 && precio_unitario > 0) {
+    if (producto_id && cantidad > 0 && precio_unitario > 0)
       productosSeleccionados.push({ producto_id: parseInt(producto_id), cantidad, precio_unitario });
-    }
   }
   if (!productosSeleccionados.length) { errorEl.textContent = 'Agrega al menos un producto'; errorEl.classList.remove('hidden'); return; }
   try {
-    await api('/pedidos', 'POST', { cliente_id: parseInt(cliente_id), productos: productosSeleccionados, descuento, observaciones });
+    await api('/pedidos', 'POST', { cliente_id: parseInt(cliente_id), productos: productosSeleccionados, descuento, observaciones, metodo_pago });
     cerrarModalPedido();
     cargarPedidosAsesor();
     cargarMetaAsesor();
@@ -299,7 +369,7 @@ async function cargarDatosAdmin() {
       <div class="stat-card" style="border-top-color:#e74c3c"><div class="number" style="color:#e74c3c">${stats.recibido}</div><div class="label">Recibidos</div></div>
       <div class="stat-card" style="border-top-color:#f39c12"><div class="number" style="color:#f39c12">${stats.preparacion}</div><div class="label">En Preparación</div></div>
       <div class="stat-card" style="border-top-color:#2980b9"><div class="number" style="color:#2980b9">${stats.despachado}</div><div class="label">Despachados</div></div>
-      <div class="stat-card" style="border-top-color:#27ae60"><div class="number" style="color:#27ae60D">${stats.entregado}</div><div class="label">Entregados</div></div>`;
+      <div class="stat-card" style="border-top-color:#27ae60"><div class="number" style="color:#27ae60">${stats.entregado}</div><div class="label">Entregados</div></div>`;
     tabAdmin('pedidos', document.querySelector('.tab.active'));
   } catch(err) { console.error(err); }
 }
@@ -312,20 +382,21 @@ async function tabAdmin(tab, el) {
   if (tab === 'pedidos') {
     const pedidos = await api('/pedidos');
     contenido.innerHTML = `<div class="card"><table class="tabla">
-      <thead><tr><th>Código</th><th>Fecha</th><th>Cliente</th><th>Asesor</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+      <thead><tr><th>Código</th><th>Fecha</th><th>Cliente</th><th>Asesor</th><th>Total</th><th>Pago</th><th>Destino</th><th>Estado</th><th></th></tr></thead>
       <tbody>${pedidos.map(p => `<tr>
         <td>${p.codigo}</td>
         <td>${new Date(p.fecha).toLocaleDateString('es-CO')}</td>
         <td>${p.cliente_nombre}</td>
         <td>${p.asesor_nombre}</td>
         <td>${fmt(p.total)}</td>
+        <td>${badgePago(p.metodo_pago)}</td>
+        <td>${badgeDestino(p.destino)}</td>
         <td>${badgeEstado(p.estado)}</td>
-        <td><button class="btn btn-dorado btn-sm" onclick="abrirModalEstado(${p.id},'${p.estado}','${p.observaciones||''}')">Actualizar</button></td>
         <td>
-        <div style="display:flex;gap:4px">
-          <button class="btn btn-dorado btn-sm" onclick="abrirModalEstado(${p.id},'${p.estado}','${p.observaciones||''}')">Estado</button>
-          <button class="btn btn-sm btn-danger" onclick="eliminarPedido(${p.id},'${p.codigo}')">🗑️</button>
-        </div>
+          <div style="display:flex;gap:4px">
+            <button class="btn btn-dorado btn-sm" onclick="abrirModalEstado(${p.id},'${p.estado}','${p.observaciones||''}')">Estado</button>
+            <button class="btn btn-sm btn-danger" onclick="eliminarPedido(${p.id},'${p.codigo}')">🗑️</button>
+          </div>
         </td>
       </tr>`).join('')}</tbody>
     </table></div>`;
@@ -335,8 +406,8 @@ async function tabAdmin(tab, el) {
     contenido.innerHTML = `<div class="card">
       <div class="card-header"><span class="card-title">🥤 Productos</span>
       <button class="btn btn-dorado btn-sm" onclick="formProducto()">+ Nuevo</button></div>
-      <table class="tabla"><thead><tr><th>Nombre</th><th>Categoría</th><th>Precio</th><th>Unidad</th></tr></thead>
-      <tbody>${prods.map(p=>`<tr><td>${p.nombre}</td><td>${p.categoria||'-'}</td><td>${fmt(p.precio)}</td><td>${p.unidad||'-'}</td></tr>`).join('')}</tbody>
+      <table class="tabla"><thead><tr><th>Código</th><th>Nombre</th><th>Categoría</th><th>Precio</th><th>Unidad</th></tr></thead>
+      <tbody>${prods.map(p=>`<tr><td>${p.codigo||'-'}</td><td>${p.nombre}</td><td>${p.categoria||'-'}</td><td>${fmt(p.precio)}</td><td>${p.unidad||'-'}</td></tr>`).join('')}</tbody>
       </table></div>`;
 
   } else if (tab === 'clientes') {
@@ -344,8 +415,8 @@ async function tabAdmin(tab, el) {
     contenido.innerHTML = `<div class="card">
       <div class="card-header"><span class="card-title">👥 Clientes</span>
       <button class="btn btn-dorado btn-sm" onclick="formCliente()">+ Nuevo</button></div>
-      <table class="tabla"><thead><tr><th>Nombre</th><th>Teléfono</th><th>Ciudad</th><th>Descuento</th></tr></thead>
-      <tbody>${cls.map(c=>`<tr><td>${c.nombre}</td><td>${c.telefono||'-'}</td><td>${c.ciudad||'-'}</td><td>${c.descuento||0}%</td></tr>`).join('')}</tbody>
+      <table class="tabla"><thead><tr><th>Nombre</th><th>Teléfono</th><th>Ciudad</th><th>Dirección</th><th>Descuento</th></tr></thead>
+      <tbody>${cls.map(c=>`<tr><td>${c.nombre}</td><td>${c.telefono||'-'}</td><td>${c.ciudad||'-'}</td><td>${c.direccion||'-'}</td><td>${c.descuento||0}%</td></tr>`).join('')}</tbody>
       </table></div>`;
 
   } else if (tab === 'usuarios') {
@@ -358,12 +429,12 @@ async function tabAdmin(tab, el) {
       <table class="tabla">
         <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
         <tbody>${users.map(u => `<tr>
-        <td>${u.nombre}</td>
-        <td>${u.email}</td>
-        <td><span class="badge badge-${u.rol}">${u.rol}</span></td>
-        <td><span class="badge ${u.activo ? 'badge-entregado' : 'badge-recibido'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
-        <td><button class="btn btn-dorado btn-sm" onclick="editarUsuario(${u.id},'${u.nombre}','${u.email}','${u.rol}',${u.activo})">Editar</button></td>
-      </tr>`).join('')}</tbody>
+          <td>${u.nombre}</td>
+          <td>${u.email}</td>
+          <td><span class="badge badge-${u.rol}">${u.rol}</span></td>
+          <td><span class="badge ${u.activo ? 'badge-entregado' : 'badge-recibido'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
+          <td><button class="btn btn-dorado btn-sm" onclick="editarUsuario(${u.id},'${u.nombre}','${u.email}','${u.rol}',${u.activo})">Editar</button></td>
+        </tr>`).join('')}</tbody>
       </table>
     </div>`;
 
@@ -392,7 +463,121 @@ async function tabAdmin(tab, el) {
         <button class="btn btn-dorado" onclick="guardarMeta()">Guardar</button>
       </div>
     </div>`;
+
+  } else if (tab === 'informes') {
+    const hoy = new Date();
+    const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
+    const hoyStr = hoy.toISOString().split('T')[0];
+    contenido.innerHTML = `<div class="card">
+      <div class="card-header"><span class="card-title">📊 Informes de Ventas</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:12px;align-items:end;margin-bottom:20px">
+        <div class="form-group" style="margin:0"><label>Desde</label><input type="date" id="informeDesde" value="${primerDia}"></div>
+        <div class="form-group" style="margin:0"><label>Hasta</label><input type="date" id="informeHasta" value="${hoyStr}"></div>
+        <button class="btn btn-dorado" onclick="generarInforme()">📊 Ver</button>
+        <button class="btn" style="background:var(--azul);color:#fff" onclick="exportarExcel()">📥 Excel</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button class="btn btn-sm ${true ? 'btn-primary' : ''}" id="tabInfAsesor" onclick="cambiarTabInforme('asesor')" style="background:var(--azul);color:#fff">Por Asesor</button>
+        <button class="btn btn-sm" id="tabInfProducto" onclick="cambiarTabInforme('producto')" style="background:#f0f0f0;color:#444">Por Producto</button>
+        <button class="btn btn-sm" id="tabInfCliente" onclick="cambiarTabInforme('cliente')" style="background:#f0f0f0;color:#444">Por Cliente</button>
+      </div>
+      <div id="informeResultado"></div>
+    </div>`;
+    generarInforme();
   }
+}
+
+let tabInformeActual = 'asesor';
+function cambiarTabInforme(tab) {
+  tabInformeActual = tab;
+  ['asesor','producto','cliente'].forEach(t => {
+    const btn = document.getElementById(`tabInf${t.charAt(0).toUpperCase()+t.slice(1)}`);
+    if (btn) btn.style.cssText = t === tab ? 'background:var(--azul);color:#fff' : 'background:#f0f0f0;color:#444';
+  });
+  generarInforme();
+}
+
+async function generarInforme() {
+  const desde = document.getElementById('informeDesde')?.value;
+  const hasta = document.getElementById('informeHasta')?.value;
+  if (!desde || !hasta) return;
+  const el = document.getElementById('informeResultado');
+  el.innerHTML = '<p style="color:#888;text-align:center;padding:16px">Cargando...</p>';
+  try {
+    const data = await api(`/informes/por-${tabInformeActual}?desde=${desde}&hasta=${hasta}`);
+    if (tabInformeActual === 'asesor') {
+      el.innerHTML = `<table class="tabla">
+        <thead><tr><th>Asesor</th><th>Total Pedidos</th><th>Entregados</th><th>Total Ventas</th><th>Ventas Entregadas</th></tr></thead>
+        <tbody>${data.map(r=>`<tr>
+          <td>${r.asesor}</td>
+          <td style="text-align:center">${r.total_pedidos}</td>
+          <td style="text-align:center">${r.pedidos_entregados}</td>
+          <td style="text-align:right">${fmt(r.total_ventas)}</td>
+          <td style="text-align:right">${fmt(r.ventas_entregadas)}</td>
+        </tr>`).join('')}
+        <tr style="font-weight:700;background:#f8f9ff">
+          <td>TOTAL</td>
+          <td style="text-align:center">${data.reduce((a,r)=>a+parseInt(r.total_pedidos),0)}</td>
+          <td style="text-align:center">${data.reduce((a,r)=>a+parseInt(r.pedidos_entregados),0)}</td>
+          <td style="text-align:right">${fmt(data.reduce((a,r)=>a+parseFloat(r.total_ventas),0))}</td>
+          <td style="text-align:right">${fmt(data.reduce((a,r)=>a+parseFloat(r.ventas_entregadas),0))}</td>
+        </tr></tbody>
+      </table>`;
+    } else if (tabInformeActual === 'producto') {
+      el.innerHTML = `<table class="tabla">
+        <thead><tr><th>Código</th><th>Producto</th><th>Categoría</th><th>Unidades</th><th>Pedidos</th><th>Total Ventas</th></tr></thead>
+        <tbody>${data.map(r=>`<tr>
+          <td>${r.codigo||'-'}</td>
+          <td>${r.producto}</td>
+          <td>${r.categoria||'-'}</td>
+          <td style="text-align:center">${r.unidades_vendidas}</td>
+          <td style="text-align:center">${r.pedidos}</td>
+          <td style="text-align:right">${fmt(r.total_ventas)}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    } else if (tabInformeActual === 'cliente') {
+      el.innerHTML = `<table class="tabla">
+        <thead><tr><th>Cliente</th><th>Ciudad</th><th>Teléfono</th><th>Pedidos</th><th>Total Compras</th><th>Último Pedido</th></tr></thead>
+        <tbody>${data.map(r=>`<tr>
+          <td>${r.cliente}</td>
+          <td>${r.ciudad||'-'}</td>
+          <td>${r.telefono||'-'}</td>
+          <td style="text-align:center">${r.total_pedidos}</td>
+          <td style="text-align:right">${fmt(r.total_compras)}</td>
+          <td>${r.ultimo_pedido ? new Date(r.ultimo_pedido).toLocaleDateString('es-CO') : '-'}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    }
+  } catch(err) { el.innerHTML = `<p style="color:red">Error: ${err.message}</p>`; }
+}
+
+async function exportarExcel() {
+  const desde = document.getElementById('informeDesde')?.value;
+  const hasta = document.getElementById('informeHasta')?.value;
+  if (!desde || !hasta) return;
+  try {
+    const [asesores, productos2, clientes2] = await Promise.all([
+      api(`/informes/por-asesor?desde=${desde}&hasta=${hasta}`),
+      api(`/informes/por-producto?desde=${desde}&hasta=${hasta}`),
+      api(`/informes/por-cliente?desde=${desde}&hasta=${hasta}`)
+    ]);
+
+    let csv = `INFORME DE VENTAS ELITE MAX NUTRITION\nPeríodo: ${desde} al ${hasta}\n\n`;
+    csv += `VENTAS POR ASESOR\nAsesor,Total Pedidos,Entregados,Total Ventas,Ventas Entregadas\n`;
+    asesores.forEach(r => csv += `${r.asesor},${r.total_pedidos},${r.pedidos_entregados},${r.total_ventas},${r.ventas_entregadas}\n`);
+    csv += `\nVENTAS POR PRODUCTO\nCódigo,Producto,Categoría,Unidades,Pedidos,Total Ventas\n`;
+    productos2.forEach(r => csv += `${r.codigo||''},${r.producto},${r.categoria||''},${r.unidades_vendidas},${r.pedidos},${r.total_ventas}\n`);
+    csv += `\nVENTAS POR CLIENTE\nCliente,Ciudad,Teléfono,Pedidos,Total Compras,Último Pedido\n`;
+    clientes2.forEach(r => csv += `${r.cliente},${r.ciudad||''},${r.telefono||''},${r.total_pedidos},${r.total_compras},${r.ultimo_pedido||''}\n`);
+
+    const blob = new Blob(['\ufeff'+csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `EliteMax_Informe_${desde}_${hasta}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(err) { alert('Error exportando: ' + err.message); }
 }
 
 async function guardarMeta() {
@@ -406,12 +591,13 @@ async function guardarMeta() {
 }
 
 function formProducto() {
+  const codigo = prompt('Código del producto (ej: EMN-001):');
   const nombre = prompt('Nombre del producto:');
   if (!nombre) return;
   const precio = prompt('Precio:');
   const categoria = prompt('Categoría:');
   const unidad = prompt('Unidad (ej: Unidad, Kg):');
-  api('/productos', 'POST', { nombre, precio: parseFloat(precio), categoria, unidad })
+  api('/productos', 'POST', { codigo, nombre, precio: parseFloat(precio), categoria, unidad })
     .then(() => tabAdmin('productos', document.querySelector('.tab.active')))
     .catch(err => alert(err.message));
 }
@@ -433,68 +619,29 @@ function formUsuario() {
   if (!nombre) return;
   const email = prompt('Email:');
   const password = prompt('Contraseña temporal:');
-  const rol = prompt('Rol (asesor / logistica / admin):');
-  if (!['asesor', 'logistica', 'admin'].includes(rol)) {
-    alert('Rol inválido. Debe ser: asesor, logistica o admin');
+  const rol = prompt('Rol (asesor / logistica / admin / facturacion):');
+  if (!['asesor', 'logistica', 'admin', 'facturacion'].includes(rol)) {
+    alert('Rol inválido. Debe ser: asesor, logistica, admin o facturacion');
     return;
   }
   api('/usuarios', 'POST', { nombre, email, password, rol })
     .then(() => tabAdmin('usuarios', document.querySelector('.tab.active')))
     .catch(err => alert(err.message));
 }
+
 function editarUsuario(id, nombre, email, rol, activo) {
   const nuevoNombre = prompt('Nombre:', nombre);
   if (!nuevoNombre) return;
   const nuevoEmail = prompt('Email:', email);
-  const nuevoRol = prompt('Rol (asesor / logistica / admin):', rol);
+  const nuevoRol = prompt('Rol (asesor / logistica / admin / facturacion):', rol);
   const nuevaPassword = prompt('Nueva contraseña (dejar vacío para no cambiar):');
   const nuevoActivo = confirm('¿Usuario activo?');
-
-  if (!['asesor', 'logistica', 'admin'].includes(nuevoRol)) {
-    alert('Rol inválido');
-    return;
-  }
-
+  if (!['asesor', 'logistica', 'admin', 'facturacion'].includes(nuevoRol)) { alert('Rol inválido'); return; }
   const body = { nombre: nuevoNombre, email: nuevoEmail, rol: nuevoRol, activo: nuevoActivo };
   if (nuevaPassword) body.password = nuevaPassword;
-
   api(`/usuarios/${id}`, 'PUT', body)
     .then(() => tabAdmin('usuarios', document.querySelector('.tab.active')))
     .catch(err => alert(err.message));
-}
-
-function abrirModalDetalle(pedido) {
-  document.getElementById('detalleCodigo').textContent = `📦 Pedido ${pedido.codigo}`;
-  document.getElementById('detalleCliente').textContent = pedido.cliente_nombre;
-  document.getElementById('detalleCiudad').textContent = `📍 ${pedido.cliente_ciudad || ''}`;
-  document.getElementById('detalleAsesor').textContent = `👤 ${pedido.asesor_nombre}`;
-  document.getElementById('detalleFecha').textContent = `📅 ${new Date(pedido.fecha).toLocaleDateString('es-CO')}`;
-  document.getElementById('detalleEstado').innerHTML = badgeEstado(pedido.estado);
-  document.getElementById('detalleObservaciones').textContent = pedido.observaciones ? `💬 ${pedido.observaciones}` : '';
-
-  const prods = (pedido.productos || []).filter(x => x.producto_id);
-  document.getElementById('detalleProductos').innerHTML = prods.map(p => `
-    <tr>
-      <td>${p.producto_nombre}</td>
-      <td style="text-align:center">${p.cantidad}</td>
-      <td style="text-align:right">${fmt(p.precio_unitario)}</td>
-      <td style="text-align:right">${fmt(p.subtotal)}</td>
-    </tr>`).join('');
-
-  document.getElementById('detalleSubtotal').textContent = fmt(pedido.subtotal);
-  document.getElementById('detalleDescuento').textContent = `-${fmt(pedido.subtotal * pedido.descuento / 100)} (${pedido.descuento}%)`;
-  document.getElementById('detalleTotal').textContent = fmt(pedido.total);
-
-  document.getElementById('btnActualizarDesdeDetalle').onclick = () => {
-    cerrarModalDetalle();
-    abrirModalEstado(pedido.id, pedido.estado, pedido.observaciones || '');
-  };
-
-  document.getElementById('modalDetalle').classList.remove('hidden');
-}
-
-function cerrarModalDetalle() {
-  document.getElementById('modalDetalle').classList.add('hidden');
 }
 
 async function eliminarPedido(id, codigo) {
@@ -508,23 +655,16 @@ async function eliminarPedido(id, codigo) {
 
 async function abrirModalEditarPedido(pedido) {
   await Promise.all([cargarProductos(), cargarClientes()]);
-  
-  // Reusar el modal de nuevo pedido
   document.getElementById('productosRows').innerHTML = '';
   document.getElementById('pedidoDescuento').value = pedido.descuento || 0;
   document.getElementById('pedidoObservaciones').value = pedido.observaciones || '';
+  document.getElementById('pedidoMetodoPago').value = pedido.metodo_pago || 'Efectivo';
   document.getElementById('modalError').classList.add('hidden');
-
-  // Cambiar título del modal
   document.querySelector('#modalPedido .modal-title').textContent = `✏️ Editar Pedido ${pedido.codigo}`;
-
-  // Seleccionar cliente
   const sel = document.getElementById('pedidoCliente');
   sel.innerHTML = '<option value="">Seleccionar cliente...</option>' +
     clientes.map(c => `<option value="${c.id}" data-descuento="${c.descuento}">${c.nombre} — ${c.ciudad}</option>`).join('');
   sel.value = pedido.cliente_id;
-
-  // Cargar productos existentes
   const prods = (pedido.productos || []).filter(x => x.producto_id);
   for (const p of prods) {
     const div = document.createElement('div');
@@ -532,21 +672,17 @@ async function abrirModalEditarPedido(pedido) {
     div.innerHTML = `
       <select class="prod-select" onchange="actualizarPrecio(this)">
         <option value="">Seleccionar producto...</option>
-        ${productos.map(pr => `<option value="${pr.id}" data-precio="${pr.precio}" ${pr.id == p.producto_id ? 'selected' : ''}>${pr.nombre}</option>`).join('')}
+        ${productos.map(pr => `<option value="${pr.id}" data-precio="${pr.precio}" ${pr.id == p.producto_id ? 'selected' : ''}>${pr.codigo ? '['+pr.codigo+'] ' : ''}${pr.nombre}</option>`).join('')}
       </select>
       <input type="number" class="prod-cantidad" placeholder="Cant." min="1" value="${p.cantidad}" oninput="calcularTotal()">
       <input type="number" class="prod-precio" placeholder="Precio" value="${p.precio_unitario}" readonly>
       <button onclick="this.parentElement.remove();calcularTotal()" style="background:#fdecea;border:none;border-radius:6px;cursor:pointer;color:#e74c3c;font-size:18px">×</button>`;
     document.getElementById('productosRows').appendChild(div);
   }
-
   calcularTotal();
-
-  // Cambiar el botón de crear por actualizar
   const btn = document.querySelector('#modalPedido .btn-primary');
   btn.textContent = 'Guardar cambios';
   btn.onclick = () => actualizarPedido(pedido.id);
-
   document.getElementById('modalPedido').classList.remove('hidden');
 }
 
@@ -554,11 +690,10 @@ async function actualizarPedido(id) {
   const cliente_id = document.getElementById('pedidoCliente').value;
   const descuento = parseFloat(document.getElementById('pedidoDescuento').value || 0);
   const observaciones = document.getElementById('pedidoObservaciones').value;
+  const metodo_pago = document.getElementById('pedidoMetodoPago').value;
   const errorEl = document.getElementById('modalError');
   errorEl.classList.add('hidden');
-
   if (!cliente_id) { errorEl.textContent = 'Selecciona un cliente'; errorEl.classList.remove('hidden'); return; }
-
   const rows = document.querySelectorAll('.producto-row');
   const productosSeleccionados = [];
   for (const row of rows) {
@@ -568,13 +703,10 @@ async function actualizarPedido(id) {
     if (producto_id && cantidad > 0 && precio_unitario > 0)
       productosSeleccionados.push({ producto_id: parseInt(producto_id), cantidad, precio_unitario });
   }
-
   if (!productosSeleccionados.length) { errorEl.textContent = 'Agrega al menos un producto'; errorEl.classList.remove('hidden'); return; }
-
   try {
-    await api(`/pedidos/${id}`, 'PUT', { cliente_id: parseInt(cliente_id), productos: productosSeleccionados, descuento, observaciones });
+    await api(`/pedidos/${id}`, 'PUT', { cliente_id: parseInt(cliente_id), productos: productosSeleccionados, descuento, observaciones, metodo_pago });
     cerrarModalPedido();
-    // Restaurar botón original
     const btn = document.querySelector('#modalPedido .btn-primary');
     btn.textContent = 'Crear Pedido';
     btn.onclick = crearPedido;
@@ -585,6 +717,95 @@ async function actualizarPedido(id) {
     errorEl.textContent = err.message;
     errorEl.classList.remove('hidden');
   }
+}
+
+function abrirModalDetalle(pedido) {
+  document.getElementById('detalleCodigo').textContent = `📦 Pedido ${pedido.codigo}`;
+  document.getElementById('detalleCliente').textContent = pedido.cliente_nombre;
+  document.getElementById('detalleCiudad').textContent = `📍 ${pedido.cliente_ciudad || ''} • ${pedido.cliente_direccion || ''}`;
+  document.getElementById('detalleAsesor').textContent = `👤 ${pedido.asesor_nombre} (ID: ${pedido.asesor_codigo})`;
+  document.getElementById('detalleFecha').textContent = `📅 ${new Date(pedido.fecha).toLocaleDateString('es-CO')}`;
+  document.getElementById('detalleEstado').innerHTML = badgeEstado(pedido.estado);
+  document.getElementById('detalleObservaciones').textContent = pedido.observaciones ? `💬 ${pedido.observaciones}` : '';
+  const prods = (pedido.productos || []).filter(x => x.producto_id);
+  document.getElementById('detalleProductos').innerHTML = prods.map(p => `
+    <tr>
+      <td>${p.producto_codigo || '-'}</td>
+      <td>${p.producto_nombre}</td>
+      <td style="text-align:center">${p.cantidad}</td>
+      <td style="text-align:right">${fmt(p.precio_unitario)}</td>
+      <td style="text-align:right">${fmt(p.subtotal)}</td>
+    </tr>`).join('');
+  document.getElementById('detalleSubtotal').textContent = fmt(pedido.subtotal);
+  document.getElementById('detalleDescuento').textContent = `-${fmt(pedido.subtotal * pedido.descuento / 100)} (${pedido.descuento}%)`;
+  document.getElementById('detalleTotal').textContent = fmt(pedido.total);
+  document.getElementById('btnActualizarDesdeDetalle').onclick = () => {
+    cerrarModalDetalle();
+    abrirModalEstado(pedido.id, pedido.estado, pedido.observaciones || '');
+  };
+  document.getElementById('modalDetalle').classList.remove('hidden');
+}
+
+function cerrarModalDetalle() { document.getElementById('modalDetalle').classList.add('hidden'); }
+
+let tabInformeAsesorActual = 'producto';
+function cambiarTabInformeAsesor(tab) {
+  tabInformeAsesorActual = tab;
+  document.getElementById('tabAsesorProd').style.cssText = tab === 'producto' ? 'background:var(--azul);color:#fff' : 'background:#f0f0f0;color:#444';
+  document.getElementById('tabAsesorCliente').style.cssText = tab === 'cliente' ? 'background:var(--azul);color:#fff' : 'background:#f0f0f0;color:#444';
+  generarInformeAsesor();
+}
+
+async function generarInformeAsesor() {
+  const desde = document.getElementById('informeDesdeAsesor')?.value;
+  const hasta = document.getElementById('informeHastaAsesor')?.value;
+  if (!desde || !hasta) return;
+  const el = document.getElementById('informeResultadoAsesor');
+  el.innerHTML = '<p style="color:#888;text-align:center;padding:16px">Cargando...</p>';
+  try {
+    const data = await api(`/informes/por-${tabInformeAsesorActual}?desde=${desde}&hasta=${hasta}`);
+    if (tabInformeAsesorActual === 'producto') {
+      el.innerHTML = `<table class="tabla">
+        <thead><tr><th>Código</th><th>Producto</th><th>Categoría</th><th>Unidades</th><th>Total Ventas</th></tr></thead>
+        <tbody>${data.map(r=>`<tr>
+          <td>${r.codigo||'-'}</td><td>${r.producto}</td><td>${r.categoria||'-'}</td>
+          <td style="text-align:center">${r.unidades_vendidas}</td>
+          <td style="text-align:right">${fmt(r.total_ventas)}</td>
+        </tr>`).join('')}</tbody></table>`;
+    } else {
+      el.innerHTML = `<table class="tabla">
+        <thead><tr><th>Cliente</th><th>Ciudad</th><th>Pedidos</th><th>Total Compras</th></tr></thead>
+        <tbody>${data.map(r=>`<tr>
+          <td>${r.cliente}</td><td>${r.ciudad||'-'}</td>
+          <td style="text-align:center">${r.total_pedidos}</td>
+          <td style="text-align:right">${fmt(r.total_compras)}</td>
+        </tr>`).join('')}</tbody></table>`;
+    }
+  } catch(err) { el.innerHTML = `<p style="color:red">Error: ${err.message}</p>`; }
+}
+
+async function exportarExcelAsesor() {
+  const desde = document.getElementById('informeDesdeAsesor')?.value;
+  const hasta = document.getElementById('informeHastaAsesor')?.value;
+  if (!desde || !hasta) { alert('Selecciona las fechas primero'); return; }
+  try {
+    const [productos2, clientes2] = await Promise.all([
+      api(`/informes/por-producto?desde=${desde}&hasta=${hasta}`),
+      api(`/informes/por-cliente?desde=${desde}&hasta=${hasta}`)
+    ]);
+    let csv = `MIS VENTAS - ELITE MAX NUTRITION\nPeríodo: ${desde} al ${hasta}\nAsesor: ${usuario.nombre}\n\n`;
+    csv += `VENTAS POR PRODUCTO\nCódigo,Producto,Categoría,Unidades,Total Ventas\n`;
+    productos2.forEach(r => csv += `${r.codigo||''},${r.producto},${r.categoria||''},${r.unidades_vendidas},${r.total_ventas}\n`);
+    csv += `\nVENTAS POR CLIENTE\nCliente,Ciudad,Pedidos,Total Compras\n`;
+    clientes2.forEach(r => csv += `${r.cliente},${r.ciudad||''},${r.total_pedidos},${r.total_compras}\n`);
+    const blob = new Blob(['\ufeff'+csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `MisVentas_${desde}_${hasta}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(err) { alert('Error exportando: ' + err.message); }
 }
 
 // ===== INICIO =====

@@ -1,107 +1,45 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const { verificarToken } = require('../middleware/auth');
+const { verificarToken, soloAdmin } = require('../middleware/auth');
 
-// Informe por asesor (admin ve todos, asesor ve solo el suyo)
-router.get('/por-asesor', verificarToken, async (req, res) => {
-  const { desde, hasta } = req.query;
+// Obtener todos los productos activos
+router.get('/', verificarToken, async (req, res) => {
   try {
-    let query = `
-      SELECT 
-        u.id as asesor_id,
-        u.nombre as asesor,
-        COUNT(p.id) as total_pedidos,
-        COALESCE(SUM(p.total), 0) as total_ventas,
-        COALESCE(SUM(CASE WHEN p.estado = 'Entregado' THEN p.total ELSE 0 END), 0) as ventas_entregadas,
-        COUNT(CASE WHEN p.estado = 'Entregado' THEN 1 END) as pedidos_entregados,
-        COUNT(CASE WHEN p.estado = 'Recibido' THEN 1 END) as pedidos_recibidos,
-        COUNT(CASE WHEN p.estado = 'En preparacion' THEN 1 END) as pedidos_preparacion,
-        COUNT(CASE WHEN p.estado = 'Despachado' THEN 1 END) as pedidos_despachados
-      FROM usuarios u
-      LEFT JOIN pedidos p ON p.asesor_id = u.id AND p.fecha BETWEEN $1 AND $2
-      WHERE u.rol = 'asesor'
-    `;
-    const params = [desde, hasta];
-
-    if (req.usuario.rol === 'asesor') {
-      query += ` AND u.id = $3`;
-      params.push(req.usuario.id);
-    }
-
-    query += ' GROUP BY u.id, u.nombre ORDER BY total_ventas DESC';
-
-    const result = await pool.query(query, params);
+    const result = await pool.query(
+      'SELECT * FROM productos WHERE activo = true ORDER BY nombre'
+    );
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Error generando informe' });
+    res.status(500).json({ error: 'Error obteniendo productos' });
   }
 });
 
-// Informe por producto
-router.get('/por-producto', verificarToken, async (req, res) => {
-  const { desde, hasta } = req.query;
+// Crear producto (solo admin)
+router.post('/', verificarToken, soloAdmin, async (req, res) => {
+  const { nombre, categoria, precio, unidad } = req.body;
   try {
-    let query = `
-      SELECT 
-        pr.codigo,
-        pr.nombre as producto,
-        pr.categoria,
-        COALESCE(SUM(dp.cantidad), 0) as unidades_vendidas,
-        COALESCE(SUM(dp.subtotal), 0) as total_ventas,
-        COUNT(DISTINCT p.id) as pedidos
-      FROM productos pr
-      LEFT JOIN detalle_pedidos dp ON dp.producto_id = pr.id
-      LEFT JOIN pedidos p ON dp.pedido_id = p.id AND p.fecha BETWEEN $1 AND $2
-    `;
-    const params = [desde, hasta];
-
-    if (req.usuario.rol === 'asesor') {
-      query += ` AND p.asesor_id = $3`;
-      params.push(req.usuario.id);
-    }
-
-    query += ' GROUP BY pr.id, pr.codigo, pr.nombre, pr.categoria ORDER BY total_ventas DESC';
-
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    const result = await pool.query(
+      'INSERT INTO productos (nombre, categoria, precio, unidad) VALUES ($1,$2,$3,$4) RETURNING *',
+      [nombre, categoria, precio, unidad]
+    );
+    res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Error generando informe' });
+    res.status(500).json({ error: 'Error creando producto' });
   }
 });
 
-// Informe por cliente
-router.get('/por-cliente', verificarToken, async (req, res) => {
-  const { desde, hasta } = req.query;
+// Editar producto (solo admin)
+router.put('/:id', verificarToken, soloAdmin, async (req, res) => {
+  const { nombre, categoria, precio, unidad, activo } = req.body;
   try {
-    let query = `
-      SELECT 
-        c.nombre as cliente,
-        c.ciudad,
-        c.telefono,
-        COUNT(p.id) as total_pedidos,
-        COALESCE(SUM(p.total), 0) as total_compras,
-        COALESCE(SUM(CASE WHEN p.estado = 'Entregado' THEN p.total ELSE 0 END), 0) as compras_entregadas,
-        MAX(p.fecha) as ultimo_pedido
-      FROM clientes c
-      LEFT JOIN pedidos p ON p.cliente_id = c.id AND p.fecha BETWEEN $1 AND $2
-    `;
-    const params = [desde, hasta];
-
-    if (req.usuario.rol === 'asesor') {
-      query += ` AND p.asesor_id = $3`;
-      params.push(req.usuario.id);
-    }
-
-    query += ' GROUP BY c.id, c.nombre, c.ciudad, c.telefono ORDER BY total_compras DESC';
-
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    const result = await pool.query(
+      'UPDATE productos SET nombre=$1, categoria=$2, precio=$3, unidad=$4, activo=$5 WHERE id=$6 RETURNING *',
+      [nombre, categoria, precio, unidad, activo, req.params.id]
+    );
+    res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Error generando informe' });
+    res.status(500).json({ error: 'Error actualizando producto' });
   }
 });
 

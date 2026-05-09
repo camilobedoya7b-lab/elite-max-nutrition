@@ -8,6 +8,7 @@ const app = express();
 // Middlewares
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Importar rutas
 const authRoutes = require('./routes/auth');
@@ -17,22 +18,18 @@ const clientesRoutes = require('./routes/clientes');
 const metasRoutes = require('./routes/metas');
 const usuariosRoutes = require('./routes/usuarios');
 
-// Usar rutas API primero
+// Usar rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/pedidos', pedidosRoutes);
 app.use('/api/productos', productosRoutes);
 app.use('/api/clientes', clientesRoutes);
 app.use('/api/metas', metasRoutes);
 app.use('/api/usuarios', usuariosRoutes);
-app.use('/api/informes', require('./routes/informes'));
 
 // Ruta de prueba
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: '🚀 Elite Max Nutrition API funcionando' });
 });
-
-// Frontend estático AL FINAL
-app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

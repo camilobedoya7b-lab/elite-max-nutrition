@@ -3,29 +3,18 @@ const router = express.Router();
 const pool = require('../db');
 const { verificarToken, soloLogistica } = require('../middleware/auth');
 
-// Función para calcular destino automáticamente
-function calcularDestino(total, metodo_pago) {
-  if (metodo_pago === 'Credito') return 'Facturacion';
-  if (total >= 1500000) return 'Facturacion';
-  return 'Logistica';
-}
-
-// Obtener pedidos filtrados por rol
+// Obtener pedidos (asesor ve los suyos, logistica/admin ve todos)
 router.get('/', verificarToken, async (req, res) => {
   try {
     let query = `
-      SELECT p.*,
+      SELECT p.*, 
         u.nombre as asesor_nombre,
-        u.id as asesor_codigo,
         c.nombre as cliente_nombre,
         c.ciudad as cliente_ciudad,
-        c.telefono as cliente_telefono,
-        c.direccion as cliente_direccion,
         json_agg(json_build_object(
           'id', dp.id,
           'producto_id', dp.producto_id,
           'producto_nombre', pr.nombre,
-          'producto_codigo', pr.codigo,
           'cantidad', dp.cantidad,
           'precio_unitario', dp.precio_unitario,
           'subtotal', dp.subtotal
@@ -38,17 +27,12 @@ router.get('/', verificarToken, async (req, res) => {
     `;
 
     const params = [];
-
     if (req.usuario.rol === 'asesor') {
       query += ' WHERE p.asesor_id = $1';
       params.push(req.usuario.id);
-    } else if (req.usuario.rol === 'logistica') {
-      query += " WHERE p.destino = 'Logistica' AND p.estado != 'Entregado'";
-    } else if (req.usuario.rol === 'facturacion') {
-      query += " WHERE p.destino = 'Facturacion'";
     }
 
-    query += ' GROUP BY p.id, u.nombre, u.id, c.nombre, c.ciudad, c.telefono, c.direccion ORDER BY p.fecha DESC, p.id DESC';
+    query += ' GROUP BY p.id, u.nombre, c.nombre, c.ciudad ORDER BY p.fecha DESC';
 
     const result = await pool.query(query, params);
     res.json(result.rows);
@@ -58,39 +42,45 @@ router.get('/', verificarToken, async (req, res) => {
   }
 });
 
-// Crear pedido
+// Crear pedido (solo asesores)
 router.post('/', verificarToken, async (req, res) => {
-  const { cliente_id, productos, descuento, observaciones, metodo_pago } = req.body;
+  const { cliente_id, productos, descuento, observaciones } = req.body;
   const client = await pool.connect();
+
   try {
     await client.query('BEGIN');
 
+    // Calcular subtotal
     let subtotal = 0;
-    for (const item of productos) subtotal += item.cantidad * item.precio_unitario;
+    for (const item of productos) {
+      subtotal += item.cantidad * item.precio_unitario;
+    }
     const total = subtotal - (subtotal * (descuento || 0) / 100);
-    const destino = calcularDestino(total, metodo_pago || 'Efectivo');
 
+    // Generar código único
     const count = await client.query('SELECT COUNT(*) FROM pedidos');
     const codigo = `PED${String(parseInt(count.rows[0].count) + 1).padStart(4, '0')}`;
 
+    // Insertar pedido
     const pedidoResult = await client.query(
-      `INSERT INTO pedidos (codigo, asesor_id, cliente_id, descuento, subtotal, total, observaciones, metodo_pago, destino)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [codigo, req.usuario.id, cliente_id, descuento || 0, subtotal, total, observaciones, metodo_pago || 'Efectivo', destino]
+      `INSERT INTO pedidos (codigo, asesor_id, cliente_id, descuento, subtotal, total, observaciones)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [codigo, req.usuario.id, cliente_id, descuento || 0, subtotal, total, observaciones]
     );
 
     const pedido = pedidoResult.rows[0];
 
+    // Insertar detalle de productos
     for (const item of productos) {
       await client.query(
         `INSERT INTO detalle_pedidos (pedido_id, producto_id, cantidad, precio_unitario, subtotal)
-         VALUES ($1,$2,$3,$4,$5)`,
+         VALUES ($1, $2, $3, $4, $5)`,
         [pedido.id, item.producto_id, item.cantidad, item.precio_unitario, item.cantidad * item.precio_unitario]
       );
     }
 
     await client.query('COMMIT');
-    res.json({ ...pedido, destino });
+    res.json(pedido);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(err);
@@ -100,14 +90,13 @@ router.post('/', verificarToken, async (req, res) => {
   }
 });
 
-// Actualizar estado
-router.put('/:id/estado', verificarToken, async (req, res) => {
+// Actualizar estado (logistica y admin)
+router.put('/:id/estado', verificarToken, soloLogistica, async (req, res) => {
   const { estado, observaciones } = req.body;
-  if (!['admin', 'logistica', 'facturacion'].includes(req.usuario.rol))
-    return res.status(403).json({ error: 'Acceso denegado' });
   try {
     const result = await pool.query(
-      `UPDATE pedidos SET estado=$1, observaciones=$2, fecha_actualizacion=NOW() WHERE id=$3 RETURNING *`,
+      `UPDATE pedidos SET estado=$1, observaciones=$2, fecha_actualizacion=NOW()
+       WHERE id=$3 RETURNING *`,
       [estado, observaciones, req.params.id]
     );
     res.json(result.rows[0]);
@@ -115,37 +104,31 @@ router.put('/:id/estado', verificarToken, async (req, res) => {
     res.status(500).json({ error: 'Error actualizando estado' });
   }
 });
-
-// Editar pedido completo
+// Editar pedido completo (asesor dueño o admin)
 router.put('/:id', verificarToken, async (req, res) => {
-  const { cliente_id, productos, descuento, observaciones, metodo_pago } = req.body;
+  const { cliente_id, productos, descuento, observaciones } = req.body;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
+    // Verificar permisos
     const pedidoActual = await client.query('SELECT * FROM pedidos WHERE id=$1', [req.params.id]);
     if (!pedidoActual.rows.length) return res.status(404).json({ error: 'Pedido no encontrado' });
+    if (req.usuario.rol === 'asesor' && pedidoActual.rows[0].asesor_id !== req.usuario.id)
+      return res.status(403).json({ error: 'No puedes editar pedidos de otros asesores' });
 
-    const pedido = pedidoActual.rows[0];
-
-    // Restricción de edición por estado para asesores
-    if (req.usuario.rol === 'asesor') {
-      if (pedido.asesor_id !== req.usuario.id)
-        return res.status(403).json({ error: 'No puedes editar pedidos de otros asesores' });
-      if (pedido.estado !== 'Recibido')
-        return res.status(403).json({ error: 'Solo puedes editar pedidos en estado Recibido' });
-    }
-
+    // Recalcular totales
     let subtotal = 0;
     for (const item of productos) subtotal += item.cantidad * item.precio_unitario;
     const total = subtotal - (subtotal * (descuento || 0) / 100);
-    const destino = calcularDestino(total, metodo_pago || pedido.metodo_pago);
 
+    // Actualizar pedido
     await client.query(
-      `UPDATE pedidos SET cliente_id=$1, descuento=$2, subtotal=$3, total=$4, observaciones=$5, metodo_pago=$6, destino=$7, fecha_actualizacion=NOW() WHERE id=$8`,
-      [cliente_id, descuento || 0, subtotal, total, observaciones, metodo_pago || pedido.metodo_pago, destino, req.params.id]
+      `UPDATE pedidos SET cliente_id=$1, descuento=$2, subtotal=$3, total=$4, observaciones=$5, fecha_actualizacion=NOW() WHERE id=$6`,
+      [cliente_id, descuento || 0, subtotal, total, observaciones, req.params.id]
     );
 
+    // Eliminar detalle anterior y reinsertar
     await client.query('DELETE FROM detalle_pedidos WHERE pedido_id=$1', [req.params.id]);
     for (const item of productos) {
       await client.query(
@@ -165,17 +148,22 @@ router.put('/:id', verificarToken, async (req, res) => {
   }
 });
 
-// Eliminar pedido
+// Eliminar pedido (asesor dueño o admin)
 router.delete('/:id', verificarToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Verificar permisos
     const pedidoActual = await client.query('SELECT * FROM pedidos WHERE id=$1', [req.params.id]);
     if (!pedidoActual.rows.length) return res.status(404).json({ error: 'Pedido no encontrado' });
     if (req.usuario.rol === 'asesor' && pedidoActual.rows[0].asesor_id !== req.usuario.id)
       return res.status(403).json({ error: 'No puedes eliminar pedidos de otros asesores' });
+
+    // Eliminar detalle primero (FK)
     await client.query('DELETE FROM detalle_pedidos WHERE pedido_id=$1', [req.params.id]);
     await client.query('DELETE FROM pedidos WHERE id=$1', [req.params.id]);
+
     await client.query('COMMIT');
     res.json({ message: 'Pedido eliminado correctamente' });
   } catch (err) {

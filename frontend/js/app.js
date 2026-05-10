@@ -467,6 +467,9 @@ function abrirModalDetalle(pedido) {
   document.getElementById('detalleCodigo').textContent = `📦 Pedido ${pedido.codigo}`;
   document.getElementById('detalleCliente').textContent = pedido.cliente_nombre;
   document.getElementById('detalleCiudad').textContent = `📍 ${pedido.cliente_ciudad || ''}`;
+  document.getElementById('detalleDireccion').textContent = `🏠 ${pedido.cliente_direccion || 'Sin dirección'}`;
+  document.getElementById('detalleTelefono').textContent = `📞 ${pedido.cliente_telefono || 'Sin teléfono'}`;
+  document.getElementById('detalleAsesorId').textContent = `🪪 ID Asesor: ${pedido.asesor_id}`;
   document.getElementById('detalleAsesor').textContent = `👤 ${pedido.asesor_nombre}`;
   document.getElementById('detalleFecha').textContent = `📅 ${new Date(pedido.fecha).toLocaleDateString('es-CO')}`;
   document.getElementById('detalleEstado').innerHTML = badgeEstado(pedido.estado);

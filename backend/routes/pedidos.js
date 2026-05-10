@@ -11,6 +11,9 @@ router.get('/', verificarToken, async (req, res) => {
         u.nombre as asesor_nombre,
         c.nombre as cliente_nombre,
         c.ciudad as cliente_ciudad,
+        c.direccion as cliente_direccion,
+        c.telefono as cliente_telefono,
+        p.asesor_id,
         json_agg(json_build_object(
           'id', dp.id,
           'producto_id', dp.producto_id,

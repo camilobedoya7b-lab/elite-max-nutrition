@@ -35,8 +35,7 @@ router.get('/', verificarToken, async (req, res) => {
       params.push(req.usuario.id);
     }
 
-    query += ' GROUP BY p.id, u.nombre, c.nombre, c.ciudad ORDER BY p.fecha DESC';
-
+    query += ' GROUP BY p.id, u.nombre, c.nombre, c.ciudad, c.direccion, c.telefono ORDER BY p.fecha DESC'; 
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
